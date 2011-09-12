@@ -300,6 +300,51 @@ public final class Iteratee {
         };
       return cont(step);
     }
+
+    /** An iteratee that consumes the input elements and returns them as a list */
+    public static final <E> IterV<E, List<E>> list() {
+        final F<List<E>, F<Input<E>, IterV<E, List<E>>>> step =
+          new F<List<E>, F<Input<E>, IterV<E, List<E>>>>() {
+            final F<List<E>, F<Input<E>, IterV<E, List<E>>>> step = this;
+
+            @Override
+            public F<Input<E>, IterV<E, List<E>>> f(final List<E> acc) {
+              final P1<IterV<E, List<E>>> empty =
+                new P1<IterV<E, List<E>>>() {
+                  @Override
+                  public IterV<E, List<E>> _1() {
+                    return cont(step.f(List.<E> nil()));
+                  }
+                };
+              final P1<F<E, IterV<E, List<E>>>> el =
+                new P1<F<E, IterV<E, List<E>>>>() {
+                  @Override
+                  public F<E, IterV<E, List<E>>> _1() {
+                    return new F<E, Iteratee.IterV<E, List<E>>>() {
+                      @Override
+                      public IterV<E, List<E>> f(final E e) {
+                        return cont(step.f(acc.append(List.single(e))));
+                      }
+                    };
+                  }
+                };
+              final P1<IterV<E, List<E>>> eof =
+                new P1<IterV<E, List<E>>>() {
+                  @Override
+                  public IterV<E, List<E>> _1() {
+                    return done(acc, Input.<E>eof());
+                  }
+                };
+              return new F<Input<E>, IterV<E, List<E>>>() {
+                @Override
+                public IterV<E, List<E>> f(final Input<E> s) {
+                  return s.apply(empty, el, eof);
+                }
+              };
+            }
+          };
+        return cont(step.f(List.<E> nil()));
+    }
   }
 
   private Iteratee() {
