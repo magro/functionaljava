@@ -313,7 +313,7 @@ public final class Iteratee {
                 new P1<IterV<E, List<E>>>() {
                   @Override
                   public IterV<E, List<E>> _1() {
-                    return cont(step.f(List.<E> nil()));
+                    return cont(step.f(acc));
                   }
                 };
               final P1<F<E, IterV<E, List<E>>>> el =
@@ -323,7 +323,7 @@ public final class Iteratee {
                     return new F<E, Iteratee.IterV<E, List<E>>>() {
                       @Override
                       public IterV<E, List<E>> f(final E e) {
-                        return cont(step.f(acc.append(List.single(e))));
+                        return cont(step.f(acc.cons(e)));
                       }
                     };
                   }
@@ -332,7 +332,7 @@ public final class Iteratee {
                 new P1<IterV<E, List<E>>>() {
                   @Override
                   public IterV<E, List<E>> _1() {
-                    return done(acc, Input.<E>eof());
+                    return done(acc.reverse(), Input.<E>eof());
                   }
                 };
               return new F<Input<E>, IterV<E, List<E>>>() {
