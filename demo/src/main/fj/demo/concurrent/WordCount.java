@@ -35,9 +35,11 @@ import fj.Unit;
 import fj.control.parallel.ParModule;
 import fj.control.parallel.Promise;
 import fj.control.parallel.Strategy;
+import fj.data.IO;
 import fj.data.LazyString;
 import fj.data.List;
 import fj.data.Option;
+import fj.data.Stream;
 import fj.data.TreeMap;
 import fj.function.Characters;
 
@@ -57,7 +59,9 @@ public class WordCount {
 		@Override
 		public LazyString f(final String fileName) {
 			try {
-				return str(readFileToString(new File(fileName)));
+				// return LazyString.str(readFileToString(new File(fileName)));
+				Stream<Character> chars = IO.enumFileChunks(new File(fileName), IO.streamFromChars()).run().run();
+				return LazyString.fromStream(chars);
 			} catch (final IOException e) {
 				throw new RuntimeException(e);
 			}

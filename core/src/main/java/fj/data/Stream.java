@@ -1,32 +1,14 @@
 package fj.data;
 
-import fj.Effect;
-import fj.Equal;
-import fj.F;
-import fj.F2;
-import fj.F3;
-import fj.Function;
-import fj.Monoid;
-import fj.Ord;
-import fj.P;
-import fj.P1;
-import fj.P2;
-import fj.Unit;
-import fj.control.parallel.Promise;
-import fj.control.parallel.Strategy;
-import fj.Ordering;
-
-import java.util.AbstractCollection;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
-
 import static fj.Bottom.error;
 import static fj.Function.compose;
 import static fj.Function.constant;
 import static fj.Function.curry;
 import static fj.Function.flip;
 import static fj.Function.identity;
+import static fj.Ordering.EQ;
+import static fj.Ordering.GT;
+import static fj.Ordering.LT;
 import static fj.P.p;
 import static fj.P.p2;
 import static fj.Unit.unit;
@@ -35,9 +17,27 @@ import static fj.data.Array.mkArray;
 import static fj.data.Option.none;
 import static fj.data.Option.some;
 import static fj.function.Booleans.not;
-import static fj.Ordering.EQ;
-import static fj.Ordering.GT;
-import static fj.Ordering.LT;
+
+import java.util.AbstractCollection;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
+import fj.Effect;
+import fj.Equal;
+import fj.F;
+import fj.F2;
+import fj.F3;
+import fj.Function;
+import fj.Monoid;
+import fj.Ord;
+import fj.Ordering;
+import fj.P;
+import fj.P1;
+import fj.P2;
+import fj.Unit;
+import fj.control.parallel.Promise;
+import fj.control.parallel.Strategy;
 
 /**
  * A lazy (not yet evaluated), immutable, singly linked list.
@@ -1048,6 +1048,22 @@ public abstract class Stream<A> implements Iterable<A> {
    */
   public static Stream<Character> fromString(final String s) {
     return LazyString.str(s).toStream();
+  }
+
+  /**
+   * Returns a stream of characters from the given char array.
+   *
+   * @param s The char[] to produce the stream of characters from.
+   * @return A stream of characters from the given char array.
+   */
+  public static Stream<Character> fromChars(final char[] chars) {
+    return Stream.unfold(new F<P2<char[], Integer>, Option<P2<Character, P2<char[], Integer>>>>() {
+      public Option<P2<Character, P2<char[], Integer>>> f(final P2<char[], Integer> o) {
+        final char[] chars = o._1();
+        final int n = o._2();
+        return chars.length <= n ? Option.<P2<Character, P2<char[], Integer>>>none() : some(p(chars[n], p(chars, n + 1)));
+      }
+    }, p(chars, 0));
   }
 
   /**
