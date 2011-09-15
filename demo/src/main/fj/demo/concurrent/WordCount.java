@@ -188,6 +188,12 @@ public class WordCount {
     final P2<List<String>, Map<String, Integer>> result = writeSampleFiles(numFiles, numSharedWords);
     final List<String> fileNames = result._1();
     final Map<String, Integer> expectedWordsAndCounts = result._2();
+    long avgSize = fileNames.foldLeft(new F2<Long, String, Long>() {
+      @Override
+      public Long f(Long a, String file) {
+        return a.longValue() + new File(file).length();
+      }}, 0l) / fileNames.length();
+    System.out.println("Processing " + numFiles + " files with an avg size of " + avgSize + " bytes.");
 
     // get word counts sequentially / single threaded
     long start = System.currentTimeMillis();
