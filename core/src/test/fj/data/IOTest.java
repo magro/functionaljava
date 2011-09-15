@@ -5,7 +5,7 @@ package fj.data;
 
 import static fj.Equal.charEqual;
 import static fj.Equal.streamEqual;
-import static fj.data.IO.enumFile;
+import static fj.data.IO.enumFileLines;
 import static fj.data.List.list;
 import static fj.data.Stream.range;
 import static org.testng.Assert.assertEquals;
@@ -36,13 +36,13 @@ public class IOTest {
   @Test
   public void testEnumFileLength() throws IOException {
     final File f = writeTmpFile("testEnumFileLength", "foo\nbar\nbaz");
-    assertEquals(enumFile(f, IterV.<String>length()).run().run(), Integer.valueOf(3));
+    assertEquals(enumFileLines(f, IterV.<String>length()).run().run(), Integer.valueOf(3));
   }
 
   @Test
   public void testEnumFileHead() throws IOException {
     final File f = writeTmpFile("testEnumFileHead", "foo\nbar\nbaz");
-    final Option<String> head = enumFile(f, IterV.<String>head()).run().run();
+    final Option<String> head = enumFileLines(f, IterV.<String>head()).run().run();
     assertTrue(head.isSome());
     assertEquals(head.some(), "foo");
   }
@@ -51,7 +51,7 @@ public class IOTest {
   public void testEnumFileDrop1() throws IOException {
     final File f = writeTmpFile("testEnumFileDrop1", "foo\nbar\nbaz");
     final IterV<String, Option<String>> head = IterV.<String>head();
-    final Option<String> dropped1 = enumFile(f, IterV.<String>drop(1).bind(Function.<Unit, IterV<String, Option<String>>>constant(head))).run().run();
+    final Option<String> dropped1 = enumFileLines(f, IterV.<String>drop(1).bind(Function.<Unit, IterV<String, Option<String>>>constant(head))).run().run();
     assertTrue(dropped1.isSome());
     assertEquals(dropped1.some(), "bar");
   }
@@ -60,7 +60,7 @@ public class IOTest {
   public void testEnumFileDrop2() throws IOException {
     final File f = writeTmpFile("testEnumFileDrop2", "foo\nbar\nbaz");
     final IterV<String, Option<String>> head = IterV.<String>head();
-    final Option<String> dropped2 = enumFile(f, IterV.<String>drop(2).bind(Function.<Unit, IterV<String, Option<String>>>constant(head))).run().run();
+    final Option<String> dropped2 = enumFileLines(f, IterV.<String>drop(2).bind(Function.<Unit, IterV<String, Option<String>>>constant(head))).run().run();
     assertTrue(dropped2.isSome());
     assertEquals(dropped2.some(), "baz");
   }
@@ -68,7 +68,7 @@ public class IOTest {
   @Test
   public void testEnumFileList() throws IOException {
     final File f = writeTmpFile("testEnumFileRead", "foo\nbar\nbaz");
-    final List<String> lines = enumFile(f, IterV.<String> list()).run().run();
+    final List<String> lines = enumFileLines(f, IterV.<String> list()).run().run();
     assertFalse(lines.isEmpty());
     assertEquals(lines.toCollection(), list("foo", "bar", "baz").toCollection());
   }
@@ -163,7 +163,7 @@ public class IOTest {
   @Test
   public void testEnumFileFromCharStreamFromLines() throws IOException {
     final File f = writeTmpFile("testEnumFileAsLazyString", "foo\nbar\nbaz");
-    final Stream<Character> charStream = IO.enumFile(f, IO.charStreamFromLines()).run().run();
+    final Stream<Character> charStream = IO.enumFileLines(f, IO.charStreamFromLines()).run().run();
     final LazyString lines = LazyString.fromStream(charStream);
     assertFalse(lines.isEmpty());
     assertEquals(lines.lines().map(LazyString.toString).toCollection(), list("foo", "bar", "baz").toCollection());
