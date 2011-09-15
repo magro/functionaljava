@@ -108,7 +108,7 @@ public class WordCount {
     @Override
     public TreeMap<String, Integer> f(final String fileName) {
       try {
-        return IO.enumFileChars(new File(fileName), wordCountsFromChars()).run().run()._2();
+        return IO.enumFileChars(new File(fileName), wordCountsFromChars()).run().run();
       } catch (final IOException e) {
         throw new RuntimeException(e);
       }
@@ -116,27 +116,27 @@ public class WordCount {
   };
 
   /** An iteratee that consumes chars and calculates word counts */
-  public static final <E> IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>> wordCountsFromChars() {
-    final F<P2<StringBuilder,TreeMap<String, Integer>>, F<Input<Character>, IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>>> step =
-      new F<P2<StringBuilder,TreeMap<String, Integer>>, F<Input<Character>, IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>>>() {
-        final F<P2<StringBuilder,TreeMap<String, Integer>>, F<Input<Character>, IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>>> step = this;
+  public static final <E> IterV<Character, TreeMap<String, Integer>> wordCountsFromChars() {
+    final F<P2<StringBuilder,TreeMap<String, Integer>>, F<Input<Character>, IterV<Character, TreeMap<String, Integer>>>> step =
+      new F<P2<StringBuilder,TreeMap<String, Integer>>, F<Input<Character>, IterV<Character, TreeMap<String, Integer>>>>() {
+        final F<P2<StringBuilder,TreeMap<String, Integer>>, F<Input<Character>, IterV<Character, TreeMap<String, Integer>>>> step = this;
 
         @Override
-        public F<Input<Character>, IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>> f(final P2<StringBuilder,TreeMap<String, Integer>> acc) {
-          final P1<IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>> empty =
-            new P1<IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>>() {
+        public F<Input<Character>, IterV<Character, TreeMap<String, Integer>>> f(final P2<StringBuilder,TreeMap<String, Integer>> acc) {
+          final P1<IterV<Character, TreeMap<String, Integer>>> empty =
+            new P1<IterV<Character, TreeMap<String, Integer>>>() {
               @Override
-              public IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>> _1() {
+              public IterV<Character, TreeMap<String, Integer>> _1() {
                 return IterV.cont(step.f(acc));
               }
             };
-          final P1<F<Character, IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>>> el =
-            new P1<F<Character, IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>>>() {
+          final P1<F<Character, IterV<Character, TreeMap<String, Integer>>>> el =
+            new P1<F<Character, IterV<Character, TreeMap<String, Integer>>>>() {
               @Override
-              public F<Character, IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>> _1() {
-                return new F<Character, Iteratee.IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>>() {
+              public F<Character, IterV<Character, TreeMap<String, Integer>>> _1() {
+                return new F<Character, Iteratee.IterV<Character, TreeMap<String, Integer>>>() {
                   @Override
-                  public IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>> f(final Character e) {
+                  public IterV<Character, TreeMap<String, Integer>> f(final Character e) {
                     if(Character.isWhitespace(e.charValue())) {
                       final StringBuilder sb = acc._1();
                       if(sb.length() > 0) {
@@ -156,21 +156,21 @@ public class WordCount {
                 };
               }
             };
-          final P1<IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>> eof =
-            new P1<IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>>() {
+          final P1<IterV<Character, TreeMap<String, Integer>>> eof =
+            new P1<IterV<Character, TreeMap<String, Integer>>>() {
               @Override
-              public IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>> _1() {
+              public IterV<Character, TreeMap<String, Integer>> _1() {
                 final StringBuilder sb = acc._1();
                 if(sb.length() > 0) {
                   final TreeMap<String, Integer> map = acc._2().update(sb.toString(), add.f(1), Integer.valueOf(1));
-                  return IterV.done(P.p(new StringBuilder(), map), Input.<Character>eof());
+                  return IterV.done(map, Input.<Character>eof());
                 }
-                return IterV.done(acc, Input.<Character>eof());
+                return IterV.done(acc._2(), Input.<Character>eof());
               }
             };
-          return new F<Input<Character>, IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>>>() {
+          return new F<Input<Character>, IterV<Character, TreeMap<String, Integer>>>() {
             @Override
-            public IterV<Character, P2<StringBuilder,TreeMap<String, Integer>>> f(final Input<Character> s) {
+            public IterV<Character, TreeMap<String, Integer>> f(final Input<Character> s) {
               return s.apply(empty, el, eof);
             }
           };
