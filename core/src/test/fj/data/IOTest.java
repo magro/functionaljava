@@ -68,7 +68,7 @@ public class IOTest {
   @Test
   public void testEnumFileList() throws IOException {
     final File f = writeTmpFile("testEnumFileRead", "foo\nbar\nbaz");
-    final List<String> lines = enumFileLines(f, IterV.<String> list()).run().run();
+    final List<String> lines = enumFileLines(f, IterV.<String> list()).run().run().reverse();
     assertFalse(lines.isEmpty());
     assertEquals(lines.toCollection(), list("foo", "bar", "baz").toCollection());
   }
@@ -132,7 +132,7 @@ public class IOTest {
     System.out.println("Created file "+ f.getAbsolutePath() +" with " + (f.length() / 1024) + " kB ("+f.length()+")");
     
     long start = System.currentTimeMillis();
-    final Stream<Character> charStream = IO.enumFileChunks(f, IO.streamFromChars()).run().run();
+    final Stream<Character> charStream = IO.enumFileCharChunks(f, IO.streamFromCharChunks()).run().run();
     System.out.println("Reading charStream from file took " + (System.currentTimeMillis() - start) + " ms.");
     
     start = System.currentTimeMillis();
@@ -154,7 +154,16 @@ public class IOTest {
   @Test
   public void testEnumFileFromChars() throws IOException {
     final File f = writeTmpFile("testEnumFileFromChars", "foo\nbar\nbaz");
-    final Stream<Character> charStream = IO.enumFileChunks(f, IO.streamFromChars()).run().run();
+    final Stream<Character> charStream = IO.enumFileChars(f, IO.streamFromChars()).run().run();
+    final LazyString lines = LazyString.fromStream(charStream);
+    assertFalse(lines.isEmpty());
+    assertEquals(lines.lines().map(LazyString.toString).toCollection(), list("foo", "bar", "baz").toCollection());
+  }
+
+  @Test
+  public void testEnumFileFromCharChunks() throws IOException {
+    final File f = writeTmpFile("testEnumFileFromChars", "foo\nbar\nbaz");
+    final Stream<Character> charStream = IO.enumFileCharChunks(f, IO.streamFromCharChunks()).run().run();
     final LazyString lines = LazyString.fromStream(charStream);
     assertFalse(lines.isEmpty());
     assertEquals(lines.lines().map(LazyString.toString).toCollection(), list("foo", "bar", "baz").toCollection());

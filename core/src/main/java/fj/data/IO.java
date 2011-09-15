@@ -56,10 +56,16 @@ public abstract class IO<A> {
       , partialApply2(IO.<A>lineReader(), i));
   }
 
-  public static <A> IO<IterV<char[], A>> enumFileChunks(final File f, final IterV<char[], A> i) {
+  public static <A> IO<IterV<char[], A>> enumFileCharChunks(final File f, final IterV<char[], A> i) {
     return bracket(fileReader(f)
       , Function.<Reader, IO<Unit>>vary(closeReader)
       , partialApply2(IO.<A>charChunkReader(), i));
+  }
+
+  public static <A> IO<IterV<Character, A>> enumFileChars(final File f, final IterV<Character, A> i) {
+    return bracket(fileReader(f)
+      , Function.<Reader, IO<Unit>>vary(closeReader)
+      , partialApply2(IO.<A>charReader(), i));
   }
 
   public static IO<BufferedReader> bufferedReader(final File f) {
@@ -193,8 +199,51 @@ public abstract class IO<A> {
     };
   }
 
+  public static <A> F<Reader, F<IterV<Character, A>, IO<IterV<Character, A>>>> charReader() {
+    final F<IterV<Character, A>, Boolean> isDone =
+      new F<Iteratee.IterV<Character, A>, Boolean>() {
+        final F<P2<A, Input<Character>>, P1<Boolean>> done = constant(P.p(true));
+        final F<F<Input<Character>, IterV<Character, A>>, P1<Boolean>> cont = constant(P.p(false));
+
+        @Override
+        public Boolean f(final IterV<Character, A> i) {
+          return i.fold(done, cont)._1();
+        }
+      };
+
+    return new F<Reader, F<IterV<Character, A>, IO<IterV<Character, A>>>>() {
+      @Override
+      public F<IterV<Character, A>, IO<IterV<Character, A>>> f(final Reader r) {
+        return new F<IterV<Character, A>, IO<IterV<Character, A>>>() {
+          final F<P2<A, Input<Character>>, P1<IterV<Character, A>>> done = errorF("iteratee is done"); //$NON-NLS-1$
+
+          @Override
+          public IO<IterV<Character, A>> f(final IterV<Character, A> it) {
+            // use loop instead of recursion because of missing TCO
+            return new IO<Iteratee.IterV<Character, A>>() {
+              @Override
+              public IterV<Character, A> run() throws IOException {
+                
+                IterV<Character, A> i = it;
+                while (!isDone.f(i)) {
+                  final int c = r.read();
+                  if (c == -1) { return i; }
+                  final Input<Character> input = Input.<Character>el(Character.valueOf((char)c));
+                  final F<F<Input<Character>, IterV<Character, A>>, P1<IterV<Character, A>>> cont =
+                      Function.<Input<Character>, IterV<Character, A>>apply(input).lazy();
+                  i = i.fold(done, cont)._1();
+                }
+                return i;
+              }
+            };
+          }
+        };
+      }
+    };
+  }
+
   /** An iteratee that consumes chunks of char arrays and returns them as a character stream */
-  public static final <E> IterV<char[], Stream<Character>> streamFromChars() {
+  public static final <E> IterV<char[], Stream<Character>> streamFromCharChunks() {
       final F<Stream<Character>, F<Input<char[]>, IterV<char[], Stream<Character>>>> step =
         new F<Stream<Character>, F<Input<char[]>, IterV<char[], Stream<Character>>>>() {
           final F<Stream<Character>, F<Input<char[]>, IterV<char[], Stream<Character>>>> step = this;
@@ -230,6 +279,51 @@ public abstract class IO<A> {
             return new F<Input<char[]>, IterV<char[], Stream<Character>>>() {
               @Override
               public IterV<char[], Stream<Character>> f(final Input<char[]> s) {
+                return s.apply(empty, el, eof);
+              }
+            };
+          }
+        };
+      return IterV.cont(step.f(Stream.<Character>nil()));
+  }
+
+  /** An iteratee that consumes chars and returns them as a character stream */
+  public static final <E> IterV<Character, Stream<Character>> streamFromChars() {
+      final F<Stream<Character>, F<Input<Character>, IterV<Character, Stream<Character>>>> step =
+        new F<Stream<Character>, F<Input<Character>, IterV<Character, Stream<Character>>>>() {
+          final F<Stream<Character>, F<Input<Character>, IterV<Character, Stream<Character>>>> step = this;
+
+          @Override
+          public F<Input<Character>, IterV<Character, Stream<Character>>> f(final Stream<Character> acc) {
+            final P1<IterV<Character, Stream<Character>>> empty =
+              new P1<IterV<Character, Stream<Character>>>() {
+                @Override
+                public IterV<Character, Stream<Character>> _1() {
+                  return IterV.cont(step.f(acc));
+                }
+              };
+            final P1<F<Character, IterV<Character, Stream<Character>>>> el =
+              new P1<F<Character, IterV<Character, Stream<Character>>>>() {
+                @Override
+                public F<Character, IterV<Character, Stream<Character>>> _1() {
+                  return new F<Character, Iteratee.IterV<Character, Stream<Character>>>() {
+                    @Override
+                    public IterV<Character, Stream<Character>> f(final Character e) {
+                      return IterV.cont(step.f(acc.append(Stream.single(e))));
+                    }
+                  };
+                }
+              };
+            final P1<IterV<Character, Stream<Character>>> eof =
+              new P1<IterV<Character, Stream<Character>>>() {
+                @Override
+                public IterV<Character, Stream<Character>> _1() {
+                  return IterV.done(acc, Input.<Character>eof());
+                }
+              };
+            return new F<Input<Character>, IterV<Character, Stream<Character>>>() {
+              @Override
+              public IterV<Character, Stream<Character>> f(final Input<Character> s) {
                 return s.apply(empty, el, eof);
               }
             };
