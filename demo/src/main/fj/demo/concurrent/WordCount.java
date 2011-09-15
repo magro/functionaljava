@@ -1,13 +1,10 @@
 package fj.demo.concurrent;
 
-import static fj.Function.uncurryF2;
 import static fj.Monoid.longAdditionMonoid;
 import static fj.Monoid.monoid;
-import static fj.Ord.stringOrd;
 import static fj.control.parallel.ParModule.parModule;
 import static fj.data.List.list;
 import static fj.data.List.nil;
-import static fj.function.Integers.add;
 import static java.util.concurrent.Executors.newFixedThreadPool;
 
 import java.io.BufferedWriter;
@@ -20,14 +17,12 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
 
 import fj.Effect;
 import fj.F;
 import fj.F2;
 import fj.Monoid;
-import fj.Ord;
 import fj.P;
 import fj.P1;
 import fj.P2;
@@ -41,9 +36,7 @@ import fj.data.Iteratee.Input;
 import fj.data.Iteratee.IterV;
 import fj.data.LazyString;
 import fj.data.List;
-import fj.data.Option;
 import fj.data.Stream;
-import fj.data.TreeMap;
 import fj.function.Characters;
 
 /**
@@ -55,7 +48,13 @@ import fj.function.Characters;
  */
 public class WordCount {
   
-  private static final F2<Integer, Integer, Integer> integersAdd = uncurryF2(add);
+  // Integers.add.f(1) caused an SOE...
+  private static final F<Integer,Integer> addOne = new F<Integer,Integer>() {
+    @Override
+    public Integer f(Integer a) {
+      return a.intValue() + 1;
+    }
+  };
 
   // reads the given files and returns their content as char stream
   private static final F<String, LazyString> readFileToLazyString = new F<String, LazyString>() {
@@ -80,14 +79,25 @@ public class WordCount {
   };
   
   // map of words to their counts (occurrences)
-  private static final F2<TreeMap<String, Integer>, LazyString, TreeMap<String, Integer>> wordsAndCounts =
-        new F2<TreeMap<String, Integer>, LazyString, TreeMap<String, Integer>>() {
+  private static final F2<Map<String, Integer>, LazyString, Map<String, Integer>> wordsAndCounts =
+        new F2<Map<String, Integer>, LazyString, Map<String, Integer>>() {
     @Override
-    public TreeMap<String, Integer> f(final TreeMap<String, Integer> map,
+    public Map<String, Integer> f(final Map<String, Integer> map,
         final LazyString word) {
-      return map.update(word.toString(), add.f(1), Integer.valueOf(1));
+      return update(map, word.toString(), addOne, Integer.valueOf(0));
     }
   };
+
+  private static <K, V> Map<K, V> update(Map<K, V> map, K key, F<V, V> valueFunction,
+      V initialValue) {
+    V value = map.get(key);
+    if(value == null) {
+      value = initialValue;
+    }
+    map.put(key, valueFunction.f(value));
+    return map;
+  }
+  
   
   private static final F<LazyString, List<LazyString>> wordsFromLazyString = new F<LazyString, List<LazyString>>() {
     @Override
@@ -96,17 +106,17 @@ public class WordCount {
     }
   };
 
-  private static final F<String, TreeMap<String, Integer>> fileNameToWordsAndCounts = new F<String, TreeMap<String, Integer>>() {
+  private static final F<String, Map<String, Integer>> fileNameToWordsAndCounts = new F<String, Map<String, Integer>>() {
     @Override
-    public TreeMap<String, Integer> f(final String a) {
+    public Map<String, Integer> f(final String a) {
       return wordsFromLazyString.f(readFileToLazyString.f(a))
-          .foldLeft(wordsAndCounts, TreeMap.<String, Integer> empty(stringOrd));
+          .foldLeft(wordsAndCounts, new HashMap<String, Integer>());
     }
   };
   
-  private static final F<String, TreeMap<String, Integer>> fileNameToWordsAndCountsWithIteratee = new F<String, TreeMap<String, Integer>>() {
+  private static final F<String, Map<String, Integer>> fileNameToWordsAndCountsWithIteratee = new F<String, Map<String, Integer>>() {
     @Override
-    public TreeMap<String, Integer> f(final String fileName) {
+    public Map<String, Integer> f(final String fileName) {
       try {
         return IO.enumFileChars(new File(fileName), wordCountsFromChars()).run().run();
       } catch (final IOException e) {
@@ -116,31 +126,31 @@ public class WordCount {
   };
 
   /** An iteratee that consumes chars and calculates word counts */
-  public static final <E> IterV<Character, TreeMap<String, Integer>> wordCountsFromChars() {
-    final F<P2<StringBuilder,TreeMap<String, Integer>>, F<Input<Character>, IterV<Character, TreeMap<String, Integer>>>> step =
-      new F<P2<StringBuilder,TreeMap<String, Integer>>, F<Input<Character>, IterV<Character, TreeMap<String, Integer>>>>() {
-        final F<P2<StringBuilder,TreeMap<String, Integer>>, F<Input<Character>, IterV<Character, TreeMap<String, Integer>>>> step = this;
+  public static final <E> IterV<Character, Map<String, Integer>> wordCountsFromChars() {
+    final F<P2<StringBuilder,Map<String, Integer>>, F<Input<Character>, IterV<Character, Map<String, Integer>>>> step =
+      new F<P2<StringBuilder,Map<String, Integer>>, F<Input<Character>, IterV<Character, Map<String, Integer>>>>() {
+        final F<P2<StringBuilder,Map<String, Integer>>, F<Input<Character>, IterV<Character, Map<String, Integer>>>> step = this;
 
         @Override
-        public F<Input<Character>, IterV<Character, TreeMap<String, Integer>>> f(final P2<StringBuilder,TreeMap<String, Integer>> acc) {
-          final P1<IterV<Character, TreeMap<String, Integer>>> empty =
-            new P1<IterV<Character, TreeMap<String, Integer>>>() {
+        public F<Input<Character>, IterV<Character, Map<String, Integer>>> f(final P2<StringBuilder,Map<String, Integer>> acc) {
+          final P1<IterV<Character, Map<String, Integer>>> empty =
+            new P1<IterV<Character, Map<String, Integer>>>() {
               @Override
-              public IterV<Character, TreeMap<String, Integer>> _1() {
+              public IterV<Character, Map<String, Integer>> _1() {
                 return IterV.cont(step.f(acc));
               }
             };
-          final P1<F<Character, IterV<Character, TreeMap<String, Integer>>>> el =
-            new P1<F<Character, IterV<Character, TreeMap<String, Integer>>>>() {
+          final P1<F<Character, IterV<Character, Map<String, Integer>>>> el =
+            new P1<F<Character, IterV<Character, Map<String, Integer>>>>() {
               @Override
-              public F<Character, IterV<Character, TreeMap<String, Integer>>> _1() {
-                return new F<Character, Iteratee.IterV<Character, TreeMap<String, Integer>>>() {
+              public F<Character, IterV<Character, Map<String, Integer>>> _1() {
+                return new F<Character, Iteratee.IterV<Character, Map<String, Integer>>>() {
                   @Override
-                  public IterV<Character, TreeMap<String, Integer>> f(final Character e) {
+                  public IterV<Character, Map<String, Integer>> f(final Character e) {
                     if(Character.isWhitespace(e.charValue())) {
                       final StringBuilder sb = acc._1();
                       if(sb.length() > 0) {
-                        final TreeMap<String, Integer> map = acc._2().update(sb.toString(), add.f(1), Integer.valueOf(1));
+                        final Map<String, Integer> map = update(acc._2(), sb.toString(), addOne, Integer.valueOf(0));
                         return IterV.cont(step.f(P.p(new StringBuilder(), map)));
                       }
                       else {
@@ -156,34 +166,34 @@ public class WordCount {
                 };
               }
             };
-          final P1<IterV<Character, TreeMap<String, Integer>>> eof =
-            new P1<IterV<Character, TreeMap<String, Integer>>>() {
+          final P1<IterV<Character, Map<String, Integer>>> eof =
+            new P1<IterV<Character, Map<String, Integer>>>() {
               @Override
-              public IterV<Character, TreeMap<String, Integer>> _1() {
+              public IterV<Character, Map<String, Integer>> _1() {
                 final StringBuilder sb = acc._1();
                 if(sb.length() > 0) {
-                  final TreeMap<String, Integer> map = acc._2().update(sb.toString(), add.f(1), Integer.valueOf(1));
+                  final Map<String, Integer> map = update(acc._2(), sb.toString(), addOne, Integer.valueOf(0));
                   return IterV.done(map, Input.<Character>eof());
                 }
                 return IterV.done(acc._2(), Input.<Character>eof());
               }
             };
-          return new F<Input<Character>, IterV<Character, TreeMap<String, Integer>>>() {
+          return new F<Input<Character>, IterV<Character, Map<String, Integer>>>() {
             @Override
-            public IterV<Character, TreeMap<String, Integer>> f(final Input<Character> s) {
+            public IterV<Character, Map<String, Integer>> f(final Input<Character> s) {
               return s.apply(empty, el, eof);
             }
           };
         }
       };
-    return IterV.cont(step.f(P.p(new StringBuilder(), TreeMap.<String, Integer> empty(stringOrd))));
+    return IterV.cont(step.f(P.p(new StringBuilder(), (Map<String, Integer>)new HashMap<String, Integer>())));
   }
-  
+
   public static void main(String[] args) throws IOException {
 
     // setup
-    int numFiles = 100;
-    int numSharedWords = 200;
+    int numFiles = 1;
+    int numSharedWords = 1000;
 
     final P2<List<String>, Map<String, Integer>> result = writeSampleFiles(numFiles, numSharedWords);
     final List<String> fileNames = result._1();
@@ -193,15 +203,21 @@ public class WordCount {
       public Long f(Long a, String file) {
         return a.longValue() + new File(file).length();
       }}, 0l) / fileNames.length();
-    System.out.println("Processing " + numFiles + " files with an avg size of " + avgSize + " bytes.");
+    System.out.println("Processing " + numFiles + " files with ~"+numSharedWords+" words and an avg size of " + avgSize + " bytes.");
+    
+    // warmup
+    getWordsAndCountsFromFiles(fileNames.take(1)).size();
+    getWordsAndCountsFromFilesWithIteratee(fileNames.take(1));
+    getWordsAndCountsFromFilesInParallel(fileNames.take(1), fileNameToWordsAndCounts, 8);
+    getWordsAndCountsFromFilesInParallel(fileNames.take(1), fileNameToWordsAndCountsWithIteratee, 8);
 
     // get word counts sequentially / single threaded
     long start = System.currentTimeMillis();
-    TreeMap<String, Integer> wordsAndCountsFromFiles = getWordsAndCountsFromFiles(fileNames);
+    Map<String, Integer> wordsAndCountsFromFiles = getWordsAndCountsFromFiles(fileNames);
     System.out.println("Getting word counts in 1 thread took " + (System.currentTimeMillis() - start) + " ms.");
     assertTrue(wordsAndCountsFromFiles != null);
     assertTrue(wordsAndCountsFromFiles.size() == numFiles + numSharedWords);
-    assertTrue(wordsAndCountsFromFiles.toMutableMap().equals(expectedWordsAndCounts));
+    assertTrue(wordsAndCountsFromFiles.equals(expectedWordsAndCounts));
 
     // get word counts sequentially / single threaded \w iteratee
     start = System.currentTimeMillis();
@@ -209,21 +225,21 @@ public class WordCount {
     System.out.println("Getting word counts in 1 thread using iteratee took " + (System.currentTimeMillis() - start) + " ms.");
     assertTrue(wordsAndCountsFromFiles != null);
     assertEquals(wordsAndCountsFromFiles.size(), numFiles + numSharedWords);
-    assertEquals(wordsAndCountsFromFiles.toMutableMap(), expectedWordsAndCounts);
-
+    assertEquals(wordsAndCountsFromFiles, expectedWordsAndCounts);
+    
     start = System.currentTimeMillis();
     wordsAndCountsFromFiles = getWordsAndCountsFromFilesInParallel(fileNames, fileNameToWordsAndCounts, 8);
     System.out.println("Getting word counts in 8 threads took " + (System.currentTimeMillis() - start) + " ms.");
     assertTrue(wordsAndCountsFromFiles != null);
     assertEquals(wordsAndCountsFromFiles.size(), numFiles + numSharedWords);
-    assertEquals(wordsAndCountsFromFiles.toMutableMap(), expectedWordsAndCounts);
+    assertEquals(wordsAndCountsFromFiles, expectedWordsAndCounts);
 
     start = System.currentTimeMillis();
     wordsAndCountsFromFiles = getWordsAndCountsFromFilesInParallel(fileNames, fileNameToWordsAndCountsWithIteratee, 8);
     System.out.println("Getting word counts in 8 threads with iteratee took " + (System.currentTimeMillis() - start) + " ms.");
     assertTrue(wordsAndCountsFromFiles != null);
     assertEquals(wordsAndCountsFromFiles.size(), numFiles + numSharedWords);
-    assertEquals(wordsAndCountsFromFiles.toMutableMap(), expectedWordsAndCounts);
+    assertEquals(wordsAndCountsFromFiles, expectedWordsAndCounts);
     
     // we have tmpfiles, but still want to be sure not to leave rubbish
     fileNames.foreach(new Effect<String>() {
@@ -234,8 +250,8 @@ public class WordCount {
   }
 
   @SuppressWarnings("unused")
-  private static void print(TreeMap<String, Integer> wordsAndCountsFromFiles) {
-    for(final Map.Entry<String, Integer> entry : wordsAndCountsFromFiles.toMutableMap().entrySet()) {
+  private static void print(Map<String, Integer> wordsAndCountsFromFiles) {
+    for(final Map.Entry<String, Integer> entry : wordsAndCountsFromFiles.entrySet()) {
       System.out.println("Have " + entry.getKey() + ": " + entry.getValue());
     }
   }
@@ -266,26 +282,28 @@ public class WordCount {
   }
   
   // Read documents and extract words and word counts of documents
-  public static TreeMap<String, Integer> getWordsAndCountsFromFiles(final List<String> fileNames) {
+  public static Map<String, Integer> getWordsAndCountsFromFiles(final List<String> fileNames) {
     return fileNames.map(readFileToLazyString).bind(wordsFromLazyString)
-        .foldLeft(wordsAndCounts, TreeMap.<String, Integer> empty(stringOrd));
+        .foldLeft(wordsAndCounts, new HashMap<String, Integer>());
   }
   
-  public static TreeMap<String, Integer> getWordsAndCountsFromFilesWithIteratee(final List<String> fileNames) {
-  return fileNames.map(fileNameToWordsAndCountsWithIteratee).foldLeft1(new F2<TreeMap<String, Integer>, TreeMap<String, Integer>, TreeMap<String, Integer>>() {
-    @Override
-    public TreeMap<String, Integer> f(TreeMap<String, Integer> a, TreeMap<String, Integer> b) {
-      return plus(a, b, integersAdd, stringOrd);
-    }});
-}
+  public static Map<String, Integer> getWordsAndCountsFromFilesWithIteratee(final List<String> fileNames) {
+    final List<Map<String, Integer>> maps = fileNames.map(fileNameToWordsAndCountsWithIteratee);
+    return maps.foldLeft(new F2<Map<String, Integer>, Map<String, Integer>, Map<String, Integer>>() {
+      @Override
+      public Map<String, Integer> f(Map<String, Integer> a, Map<String, Integer> b) {
+        return plus(a, b);
+      }
+    }, new HashMap<String, Integer>());
+  }
   
-  public static TreeMap<String, Integer> getWordsAndCountsFromFilesInParallel(
-      final List<String> fileNames, final F<String, TreeMap<String, Integer>> fileNameToWordsAndCounts, int numThreads) {
+  public static Map<String, Integer> getWordsAndCountsFromFilesInParallel(
+      final List<String> fileNames, final F<String, Map<String, Integer>> fileNameToWordsAndCounts, int numThreads) {
     final ExecutorService pool = newFixedThreadPool(numThreads);
     final ParModule m = parModule(Strategy.<Unit> executorStrategy(pool));
 
     // Long wordCount = countWords(fileNames.map(readFile), m).claim();    
-    final TreeMap<String, Integer> result = getWordsAndCountsFromFiles(fileNames, fileNameToWordsAndCounts, m).claim();
+    final Map<String, Integer> result = getWordsAndCountsFromFiles(fileNames, fileNameToWordsAndCounts, m).claim();
 
     pool.shutdown();
 
@@ -293,54 +311,36 @@ public class WordCount {
   }
   
   // Read documents and extract words and word counts of documents
-  public static Promise<TreeMap<String, Integer>> getWordsAndCountsFromFiles(
-      final List<String> fileNames, final F<String, TreeMap<String, Integer>> fileNameToWordsAndCounts, final ParModule m) {
-    final F<TreeMap<String, Integer>, F<TreeMap<String, Integer>, TreeMap<String, Integer>>> treeMapSum =
-        new F<TreeMap<String, Integer>, F<TreeMap<String, Integer>, TreeMap<String, Integer>>>() {
+  public static Promise<Map<String, Integer>> getWordsAndCountsFromFiles(
+      final List<String> fileNames, final F<String, Map<String, Integer>> fileNameToWordsAndCounts, final ParModule m) {
+    final F<Map<String, Integer>, F<Map<String, Integer>, Map<String, Integer>>> MapSum =
+        new F<Map<String, Integer>, F<Map<String, Integer>, Map<String, Integer>>>() {
       @Override
-      public F<TreeMap<String, Integer>, TreeMap<String, Integer>> f(
-          final TreeMap<String, Integer> a) {
-        return new F<TreeMap<String, Integer>, TreeMap<String, Integer>>() {
+      public F<Map<String, Integer>, Map<String, Integer>> f(
+          final Map<String, Integer> a) {
+        return new F<Map<String, Integer>, Map<String, Integer>>() {
 
           @Override
-          public TreeMap<String, Integer> f(final TreeMap<String, Integer> b) {
-            return plus(a, b, integersAdd, stringOrd);
+          public Map<String, Integer> f(final Map<String, Integer> b) {
+            return plus(a, b);
           }
           
         };
       }
       
     };
-    final Monoid<TreeMap<String, Integer>> monoid = monoid(treeMapSum,
-        TreeMap.<String, Integer> empty(stringOrd));
+    final Monoid<Map<String, Integer>> monoid = monoid(MapSum,
+        new HashMap<String, Integer>());
     return m.parFoldMap(fileNames, fileNameToWordsAndCounts, monoid);
   }
   
-  private static <K, V> TreeMap<K, V> plus(final TreeMap<K, V> a,
-      final TreeMap<K, V> b,
-      final F2<V, V, V> update,
-      final Ord<K> ord) {
-    if(a.isEmpty()) {
-      return b;
+  private static Map<String, Integer> plus(Map<String, Integer> a, Map<String, Integer> b) {
+    final Map<String, Integer> result = new HashMap<String, Integer>(a);
+    for(Map.Entry<String, Integer> entry : b.entrySet()) {
+      final Integer num = result.get(entry.getKey());
+      result.put(entry.getKey(), num != null ? num.intValue() + entry.getValue() : entry.getValue());
     }
-    else if (b.isEmpty()) {
-      return a;
-    }
-    final Map<K, V> ma = a.toMutableMap();
-    // Update all entries in a by adding the values of matching keys from b
-    for(final Entry<K, V> entry : ma.entrySet()) {
-      final Option<V> value = b.get(entry.getKey());
-      if(value.isSome()) {
-        entry.setValue(update.f(entry.getValue(), value.some()));
-      }
-    }
-    // Add all entries from b that are not already in a
-    for(final Entry<K, V> entry : b.toMutableMap().entrySet()) {
-      if(!ma.containsKey(entry.getKey())) {
-        ma.put(entry.getKey(), entry.getValue());
-      }
-    }
-    return TreeMap.fromMutableMap(ord, ma);
+    return result;
   }
 
   // Main program does the requisite IO gymnastics
