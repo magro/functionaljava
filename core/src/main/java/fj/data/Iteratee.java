@@ -301,7 +301,8 @@ public final class Iteratee {
       return cont(step);
     }
 
-    /** An iteratee that consumes the input elements and returns them as a list */
+    /** An iteratee that consumes the input elements and returns them as a list in reverse order,
+     * so that the last line is the first element. This allows to build a list from 2 iteratees. */
     public static final <E> IterV<E, List<E>> list() {
         final F<List<E>, F<Input<E>, IterV<E, List<E>>>> step =
           new F<List<E>, F<Input<E>, IterV<E, List<E>>>>() {
@@ -332,7 +333,7 @@ public final class Iteratee {
                 new P1<IterV<E, List<E>>>() {
                   @Override
                   public IterV<E, List<E>> _1() {
-                    return done(acc.reverse(), Input.<E>eof());
+                    return done(acc, Input.<E>eof());
                   }
                 };
               return new F<Input<E>, IterV<E, List<E>>>() {
