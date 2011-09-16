@@ -114,7 +114,18 @@ public class WordCount {
     }
   };
   
-  private static final F<String, Map<String, Integer>> fileNameToWordsAndCountsWithIteratee = new F<String, Map<String, Integer>>() {
+  private static final F<String, Map<String, Integer>> fileNameToWordsAndCountsWithCharChunkIteratee = new F<String, Map<String, Integer>>() {
+    @Override
+    public Map<String, Integer> f(final String fileName) {
+      try {
+        return IO.enumFileCharChunks(new File(fileName), wordCountsFromCharChunks()).run().run();
+      } catch (final IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  };
+  
+  private static final F<String, Map<String, Integer>> fileNameToWordsAndCountsWithCharIteratee = new F<String, Map<String, Integer>>() {
     @Override
     public Map<String, Integer> f(final String fileName) {
       try {
@@ -124,6 +135,69 @@ public class WordCount {
       }
     }
   };
+
+  /** An iteratee that consumes char chunks and calculates word counts */
+  public static final <E> IterV<char[], Map<String, Integer>> wordCountsFromCharChunks() {
+    final F<P2<StringBuilder,Map<String, Integer>>, F<Input<char[]>, IterV<char[], Map<String, Integer>>>> step =
+      new F<P2<StringBuilder,Map<String, Integer>>, F<Input<char[]>, IterV<char[], Map<String, Integer>>>>() {
+        final F<P2<StringBuilder,Map<String, Integer>>, F<Input<char[]>, IterV<char[], Map<String, Integer>>>> step = this;
+
+        @Override
+        public F<Input<char[]>, IterV<char[], Map<String, Integer>>> f(final P2<StringBuilder,Map<String, Integer>> acc) {
+          final P1<IterV<char[], Map<String, Integer>>> empty =
+            new P1<IterV<char[], Map<String, Integer>>>() {
+              @Override
+              public IterV<char[], Map<String, Integer>> _1() {
+                return IterV.cont(step.f(acc));
+              }
+            };
+          final P1<F<char[], IterV<char[], Map<String, Integer>>>> el =
+            new P1<F<char[], IterV<char[], Map<String, Integer>>>>() {
+              @Override
+              public F<char[], IterV<char[], Map<String, Integer>>> _1() {
+                return new F<char[], Iteratee.IterV<char[], Map<String, Integer>>>() {
+                  @Override
+                  public IterV<char[], Map<String, Integer>> f(final char[] e) {
+                    StringBuilder sb = acc._1();
+                    Map<String, Integer> map = acc._2();
+                    for(char c : e) {
+                      if(Character.isWhitespace(c)) {
+                        if(sb.length() > 0) {
+                          map = update(map, sb.toString(), addOne, Integer.valueOf(0));
+                          sb = new StringBuilder();
+                        }
+                      }
+                      else {
+                        sb.append(c);
+                      }
+                    }
+                    return IterV.cont(step.f(P.p(sb, map)));
+                  }
+                };
+              }
+            };
+          final P1<IterV<char[], Map<String, Integer>>> eof =
+            new P1<IterV<char[], Map<String, Integer>>>() {
+              @Override
+              public IterV<char[], Map<String, Integer>> _1() {
+                final StringBuilder sb = acc._1();
+                if(sb.length() > 0) {
+                  final Map<String, Integer> map = update(acc._2(), sb.toString(), addOne, Integer.valueOf(0));
+                  return IterV.done(map, Input.<char[]>eof());
+                }
+                return IterV.done(acc._2(), Input.<char[]>eof());
+              }
+            };
+          return new F<Input<char[]>, IterV<char[], Map<String, Integer>>>() {
+            @Override
+            public IterV<char[], Map<String, Integer>> f(final Input<char[]> s) {
+              return s.apply(empty, el, eof);
+            }
+          };
+        }
+      };
+    return IterV.cont(step.f(P.p(new StringBuilder(), (Map<String, Integer>)new HashMap<String, Integer>())));
+  }
 
   /** An iteratee that consumes chars and calculates word counts */
   public static final <E> IterV<Character, Map<String, Integer>> wordCountsFromChars() {
@@ -193,7 +267,7 @@ public class WordCount {
 
     // setup
     int numFiles = 1;
-    int numSharedWords = 1000;
+    int numSharedWords = 10000;
 
     final P2<List<String>, Map<String, Integer>> result = writeSampleFiles(numFiles, numSharedWords);
     final List<String> fileNames = result._1();
@@ -206,10 +280,13 @@ public class WordCount {
     System.out.println("Processing " + numFiles + " files with ~"+numSharedWords+" words and an avg size of " + avgSize + " bytes.");
     
     // warmup
-    getWordsAndCountsFromFiles(fileNames.take(1)).size();
-    getWordsAndCountsFromFilesWithIteratee(fileNames.take(1));
-    getWordsAndCountsFromFilesInParallel(fileNames.take(1), fileNameToWordsAndCounts, 8);
-    getWordsAndCountsFromFilesInParallel(fileNames.take(1), fileNameToWordsAndCountsWithIteratee, 8);
+    for(int i = 0; i < 20; i++) {
+      getWordsAndCountsFromFiles(fileNames.take(1)).size();
+      getWordsAndCountsFromFilesWithIteratee(fileNames.take(1), fileNameToWordsAndCountsWithCharIteratee);
+      getWordsAndCountsFromFilesWithIteratee(fileNames.take(1), fileNameToWordsAndCountsWithCharChunkIteratee);
+      getWordsAndCountsFromFilesInParallel(fileNames.take(1), fileNameToWordsAndCounts, 8);
+      getWordsAndCountsFromFilesInParallel(fileNames.take(1), fileNameToWordsAndCountsWithCharIteratee, 8);
+    }
 
     // get word counts sequentially / single threaded
     long start = System.currentTimeMillis();
@@ -221,22 +298,37 @@ public class WordCount {
 
     // get word counts sequentially / single threaded \w iteratee
     start = System.currentTimeMillis();
-    wordsAndCountsFromFiles = getWordsAndCountsFromFilesWithIteratee(fileNames);
-    System.out.println("Getting word counts in 1 thread using iteratee took " + (System.currentTimeMillis() - start) + " ms.");
+    wordsAndCountsFromFiles = getWordsAndCountsFromFilesWithIteratee(fileNames, fileNameToWordsAndCountsWithCharIteratee);
+    System.out.println("Getting word counts in 1 thread using char iteratee took " + (System.currentTimeMillis() - start) + " ms.");
+    assertTrue(wordsAndCountsFromFiles != null);
+    assertEquals(wordsAndCountsFromFiles.size(), numFiles + numSharedWords);
+    assertEquals(wordsAndCountsFromFiles, expectedWordsAndCounts);
+
+    // get word counts sequentially / single threaded \w iteratee
+    start = System.currentTimeMillis();
+    wordsAndCountsFromFiles = getWordsAndCountsFromFilesWithIteratee(fileNames, fileNameToWordsAndCountsWithCharChunkIteratee);
+    System.out.println("Getting word counts in 1 thread using char chunk iteratee took " + (System.currentTimeMillis() - start) + " ms.");
     assertTrue(wordsAndCountsFromFiles != null);
     assertEquals(wordsAndCountsFromFiles.size(), numFiles + numSharedWords);
     assertEquals(wordsAndCountsFromFiles, expectedWordsAndCounts);
     
+//    start = System.currentTimeMillis();
+//    wordsAndCountsFromFiles = getWordsAndCountsFromFilesInParallel(fileNames, fileNameToWordsAndCounts, 8);
+//    System.out.println("Getting word counts in 8 threads took " + (System.currentTimeMillis() - start) + " ms.");
+//    assertTrue(wordsAndCountsFromFiles != null);
+//    assertEquals(wordsAndCountsFromFiles.size(), numFiles + numSharedWords);
+//    assertEquals(wordsAndCountsFromFiles, expectedWordsAndCounts);
+
     start = System.currentTimeMillis();
-    wordsAndCountsFromFiles = getWordsAndCountsFromFilesInParallel(fileNames, fileNameToWordsAndCounts, 8);
-    System.out.println("Getting word counts in 8 threads took " + (System.currentTimeMillis() - start) + " ms.");
+    wordsAndCountsFromFiles = getWordsAndCountsFromFilesInParallel(fileNames, fileNameToWordsAndCountsWithCharIteratee, 8);
+    System.out.println("Getting word counts in 8 threads with char iteratee took " + (System.currentTimeMillis() - start) + " ms.");
     assertTrue(wordsAndCountsFromFiles != null);
     assertEquals(wordsAndCountsFromFiles.size(), numFiles + numSharedWords);
     assertEquals(wordsAndCountsFromFiles, expectedWordsAndCounts);
 
     start = System.currentTimeMillis();
-    wordsAndCountsFromFiles = getWordsAndCountsFromFilesInParallel(fileNames, fileNameToWordsAndCountsWithIteratee, 8);
-    System.out.println("Getting word counts in 8 threads with iteratee took " + (System.currentTimeMillis() - start) + " ms.");
+    wordsAndCountsFromFiles = getWordsAndCountsFromFilesInParallel(fileNames, fileNameToWordsAndCountsWithCharChunkIteratee, 8);
+    System.out.println("Getting word counts in 8 threads with char chunk iteratee took " + (System.currentTimeMillis() - start) + " ms.");
     assertTrue(wordsAndCountsFromFiles != null);
     assertEquals(wordsAndCountsFromFiles.size(), numFiles + numSharedWords);
     assertEquals(wordsAndCountsFromFiles, expectedWordsAndCounts);
@@ -287,7 +379,8 @@ public class WordCount {
         .foldLeft(wordsAndCounts, new HashMap<String, Integer>());
   }
   
-  public static Map<String, Integer> getWordsAndCountsFromFilesWithIteratee(final List<String> fileNames) {
+  public static Map<String, Integer> getWordsAndCountsFromFilesWithIteratee(final List<String> fileNames,
+      final F<String, Map<String, Integer>> fileNameToWordsAndCountsWithIteratee) {
     final List<Map<String, Integer>> maps = fileNames.map(fileNameToWordsAndCountsWithIteratee);
     return maps.foldLeft(new F2<Map<String, Integer>, Map<String, Integer>, Map<String, Integer>>() {
       @Override
