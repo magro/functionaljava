@@ -1,38 +1,47 @@
-/**
- * 
- */
-package fj.data;
+package fj
+package data
 
-import static fj.Equal.charEqual;
-import static fj.Equal.streamEqual;
-import static fj.data.IO.enumFileLines;
-import static fj.data.List.list;
-import static fj.data.Stream.range;
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertTrue;
-
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.Writer;
-import java.util.Arrays;
-
-import org.testng.annotations.Test;
-
-import fj.F;
-import fj.F2;
-import fj.Function;
-import fj.Unit;
-import fj.data.Iteratee.IterV;
+import fj.Effect
+import fj.data.IO._
+import fj.data.Iteratee.IterV
+import fj.data.Iteratee.IterV._
+import java.io.{File, BufferedWriter, FileWriter, IOException}
+import org.scalatest.testng.TestNGSuite
+import org.junit.Assert._
+import org.junit.Test
+import org.junit.Before
 
 /**
  * @author Martin Grotzke
- *
  */
-public class IOTest {
+class IOTest extends TestNGSuite {
+  
+  @Test def testEnumFileLength() {
+    val f = writeTmpFile("testEnumFileLength", "foo\nbar\nbaz")
+    assertEquals(enumFileLines(f, IterV.length()).run().run(), Integer.valueOf(3))
+  }
+  
+  def writeTmpFile(name: java.lang.String, content: String): File = {
+    val result = File.createTempFile(name, ".tmp")
+    val writer = new BufferedWriter(new FileWriter(result))
+    writer.write(content)
+    writer.close()
+    result
+  }
+  
+  def writeTmpFile(name: java.lang.String, content: Stream[java.lang.String]): File = {
+    val result = File.createTempFile(name, ".tmp")
+    val writer = new BufferedWriter(new FileWriter(result))
+    content.foreach(new Effect[String]() {
+      override def e(a: String) {
+        writer.write(a)
+      }
+    })
+    writer.close()
+    result
+  }
 
+  /*
   @Test
   public void testEnumFileLength() throws IOException {
     final File f = writeTmpFile("testEnumFileLength", "foo\nbar\nbaz");
@@ -98,23 +107,6 @@ public class IOTest {
     start = System.currentTimeMillis();
     int length = contentAsCharStream.length();
     System.out.println("Calculating length ("+length+") from char stream took " + (System.currentTimeMillis() - start) + " ms.");
-    
-    
-    
-//    Arrays.fill(chars, '0');
-//    String s = String.valueOf(chars);
-//    long start = System.currentTimeMillis();
-//    Stream<Character> stream = Stream.fromString(s);
-//    System.out.println("Creating stream from string took " + (System.currentTimeMillis() - start) + " ms.");
-//    
-//    start = System.currentTimeMillis();
-//    Stream<Integer> ints = stream.map(new F<Character,Integer>(){
-//      @Override
-//      public Integer f(Character a) {
-//        return Integer.valueOf(a.charValue());
-//      }});
-//    int length = ints.length();
-//    System.out.println("Creating int stream (length "+length+") from char stream took " + (System.currentTimeMillis() - start) + " ms.");
     
   }
 
@@ -200,6 +192,6 @@ public class IOTest {
     }
     return result;
   }
-
+*/
   
 }
