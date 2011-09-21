@@ -1,42 +1,53 @@
 package fj
 package data
 
-import Equal.{listEqual, stringEqual, charEqual, anyEqual}
-import P.p
+import Equal.{listEqual, anyEqual}
 import Unit.unit
-import List.{list, fromString}
-import fj.Effect
-import fj.Show.{listShow, stringShow, intShow, anyShow}
+import fj.Show.{listShow, anyShow}
 import fj.data.IO._
 import fj.data.Iteratee.IterV
-import fj.data.Iteratee.IterV._
-import java.io.{File, BufferedWriter, FileWriter, IOException}
+import java.io.{File, BufferedWriter, OutputStreamWriter, FileOutputStream}
+import java.nio.charset.Charset
+import java.nio.charset.Charset.{availableCharsets, defaultCharset}
 import org.scalacheck.Prop._
+import org.scalacheck.Gen
 import org.scalacheck.Properties
+import org.scalacheck.Arbitrary
 import ArbitraryList.arbitraryList
+import ArbitraryOption.arbitraryOption
 import java.lang.Character
 import scala.{Array => SArray}
 
+/**
+ * Checks for {@link IO}.
+ * 
+ * @author Martin Grotzke
+ */
 object CheckIO extends Properties("IO") {
 
-  property("enumFileLines") = forAll((a: List[Int]) =>
-    withFileContent(a) {
+  // implicit conversion of the j.u.Collection did not work properly, thus it written manually...
+  implicit def charsets: Arbitrary[Charset] = Arbitrary(Gen.oneOf(availableCharsets().values().toArray(scala.Array[Charset]()).toList.filter(
+     cs => cs.name.contains("ISO-8") || cs.name.contains("UTF")
+    )))
+
+  property("enumFileLines") = forAll((a: List[Int], c: Option[Charset]) =>
+    withFileContent(c, a) {
       (f) =>
-      val actual: List[Int] = enumFileLines(f, IterV.list()).run().run().reverse().map[Int]((x: String) => java.lang.Integer.parseInt(x))
+      val actual: List[Int] = enumFileLines(f, c, IterV.list()).run().run().reverse().map[Int]((x: String) => java.lang.Integer.parseInt(x))
       listEqual(anyEqual[Int]).eq(actual, a) :| wrongResult(listShow(anyShow[Int]).showS(actual), listShow(anyShow[Int]).showS(a))
     })
 
-  property("enumFileCharChunks") = forAll((a: List[Int]) =>
-    withFileContent(a) {
+  property("enumFileCharChunks") = forAll((a: List[Int], c: Option[Charset]) =>
+    withFileContent(c, a) {
       (f) =>
-      val actual: List[SArray[Char]] = enumFileCharChunks(f, IterV.list[SArray[Char]]()).run().run().reverse()
+      val actual: List[SArray[Char]] = enumFileCharChunks(f, c, IterV.list[SArray[Char]]()).run().run().reverse()
       (joinAsString(actual) == toStringWithNewLines(a)) :| wrongResult(joinAsString(actual), toStringWithNewLines(a))
     })
 
-  property("enumFileChars") = forAll((a: List[Int]) =>
-    withFileContent(a) {
+  property("enumFileChars") = forAll((a: List[Int], c: Option[Charset]) =>
+    withFileContent(c, a) {
       (f) =>
-      val actual: List[Character] = enumFileChars(f, IterV.list[Character]()).run().run().reverse()
+      val actual: List[Character] = enumFileChars(f, c, IterV.list[Character]()).run().run().reverse()
       (List.asString(actual) == toStringWithNewLines(a)) :| wrongResult(List.asString(actual), toStringWithNewLines(a))
     })
     
@@ -44,8 +55,8 @@ object CheckIO extends Properties("IO") {
     "Wrong result:\n>>>\n" + actual + "\n===\nExpected:\n"+ expected +"\n<<<"
   }
   
-  private def withFileContent[E, A](lines: List[E])(f: File => A): A = {
-    val file = writeTmpFile("tmpFile", lines)
+  private def withFileContent[E, A](fileEncoding: Option[Charset], lines: List[E])(f: File => A): A = {
+    val file = writeTmpFile("tmpFile", lines, fileEncoding)
     try {
       f(file)
     } finally {
@@ -53,9 +64,9 @@ object CheckIO extends Properties("IO") {
     }
   }
   
-  private def writeTmpFile[E](name: String, lines: List[E]): File = {
+  private def writeTmpFile[E](name: String, lines: List[E], fileEncoding: Option[Charset]): File = {
     val result = File.createTempFile(name, ".tmp")
-    val writer = new BufferedWriter(new FileWriter(result))
+    val writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(result), fileEncoding.orSome(defaultCharset)))
     writer.write(toStringWithNewLines(lines))
     writer.close()
     result

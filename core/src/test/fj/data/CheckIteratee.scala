@@ -4,19 +4,18 @@ package data
 import Equal.{listEqual, stringEqual}
 import P.p
 import Unit.unit
-import List.{list, nil, fromString}
+import List.{list, nil}
 import Option.{some, none}
-import fj.Effect
 import fj.Function._
 import fj.data.Iteratee._
-import fj.data.Iteratee.IterV._
 
 import org.scalacheck.Prop._
 import ArbitraryList.arbitraryList
-import ArbitraryP.arbitraryP1
 import org.scalacheck.Properties
 
 /**
+ * Checks for {@link Iteratee}.
+ * 
  * @author Martin Grotzke
  */
 object CheckIteratee extends Properties("Iteratee") {

@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.io.Writer;
+import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -33,6 +34,7 @@ import fj.data.Iteratee;
 import fj.data.Iteratee.Input;
 import fj.data.Iteratee.IterV;
 import fj.data.List;
+import fj.data.Option;
 
 /**
  * Reads words and their counts from files ({@link #getWordsAndCountsFromFiles(List)} in a single thread
@@ -65,7 +67,7 @@ public class WordCount {
     @Override
     public Map<String, Integer> f(final String fileName) {
       try {
-        return IO.enumFileCharChunks(new File(fileName), wordCountsFromCharChunks()).run().run();
+        return IO.enumFileCharChunks(new File(fileName), Option.<Charset> none(), wordCountsFromCharChunks()).run().run();
       } catch (final IOException e) {
         throw new RuntimeException(e);
       }
@@ -76,7 +78,7 @@ public class WordCount {
     @Override
     public Map<String, Integer> f(final String fileName) {
       try {
-        return IO.enumFileChars(new File(fileName), wordCountsFromChars()).run().run();
+        return IO.enumFileChars(new File(fileName), Option.<Charset> none(), wordCountsFromChars()).run().run();
       } catch (final IOException e) {
         throw new RuntimeException(e);
       }
@@ -87,7 +89,7 @@ public class WordCount {
     @Override
     public Map<String, Integer> f(final String fileName) {
       try {
-        return IO.enumFileChars(new File(fileName), wordCountsFromChars()).run().run();
+        return IO.enumFileChars(new File(fileName), Option.<Charset> none(), wordCountsFromChars()).run().run();
       } catch (final IOException e) {
         throw new RuntimeException(e);
       }

@@ -6,9 +6,11 @@ import static fj.Function.partialApply2;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 
 import fj.F;
@@ -20,17 +22,19 @@ import fj.Unit;
 import fj.data.Iteratee.Input;
 import fj.data.Iteratee.IterV;
 
+/**
+ * IO monad for processing files, with main methods {@link #enumFileLines(File, Option, IterV)},
+ * {@link #enumFileChars(File, Option, IterV)} and {@link #enumFileCharChunks(File, Option, IterV)}
+ * (the latter one is the fastest as char chunks read from the file are directly passed to the iteratee
+ * without indirection in between).
+ *
+ * @author Martin Grotzke
+ *
+ * @param <A> the type of the result produced by the wrapped iteratee
+ */
 public abstract class IO<A> {
   
   private static final int DEFAULT_BUFFER_SIZE = 1024 * 4;
-
-  public static final F<File, IO<BufferedReader>> bufferFile =
-    new F<File, IO<BufferedReader>>() {
-      @Override
-      public IO<BufferedReader> f(final File f) {
-        return bufferedReader(f);
-      }
-    };
 
   public static final F<Reader, IO<Unit>> closeReader =
     new F<Reader, IO<Unit>>() {
@@ -55,45 +59,57 @@ public abstract class IO<A> {
    * lines to the provided iteratee. May not be suitable for files with very long
    * lines, consider to use {@link #enumFileCharChunks(File, IterV)} or {@link #enumFileChars(File, IterV)}
    * as an alternative.
+   * 
+   * @param f the file to read, must not be <code>null</code>
+   * @param encoding the encoding to use, {@link Option#none()} means platform default
+   * @param i the iteratee that is fed with lines read from the file
    */
-  public static <A> IO<IterV<String, A>> enumFileLines(final File f, final IterV<String, A> i) {
-    return bracket(bufferedReader(f)
+  public static <A> IO<IterV<String, A>> enumFileLines(final File f, final Option<Charset> encoding, final IterV<String, A> i) {
+    return bracket(bufferedReader(f, encoding)
       , Function.<BufferedReader, IO<Unit>>vary(closeReader)
       , partialApply2(IO.<A>lineReader(), i));
   }
 
   /**
    * An IO monad that reads char chunks from the given file and passes them to the given iteratee.
+   * 
+   * @param f the file to read, must not be <code>null</code>
+   * @param encoding the encoding to use, {@link Option#none()} means platform default
+   * @param i the iteratee that is fed with char chunks read from the file
    */
-  public static <A> IO<IterV<char[], A>> enumFileCharChunks(final File f, final IterV<char[], A> i) {
-    return bracket(fileReader(f)
+  public static <A> IO<IterV<char[], A>> enumFileCharChunks(final File f, final Option<Charset> encoding, final IterV<char[], A> i) {
+    return bracket(fileReader(f, encoding)
       , Function.<Reader, IO<Unit>>vary(closeReader)
       , partialApply2(IO.<A>charChunkReader(), i));
   }
 
   /**
    * An IO monad that reads char chunks from the given file and passes single chars to the given iteratee.
+   * 
+   * @param f  the file to read, must not be <code>null</code>
+   * @param encoding  the encoding to use, {@link Option#none()} means platform default
+   * @param i the iteratee that is fed with chars read from the file
    */
-  public static <A> IO<IterV<Character, A>> enumFileChars(final File f, final IterV<Character, A> i) {
-    return bracket(fileReader(f)
+  public static <A> IO<IterV<Character, A>> enumFileChars(final File f, final Option<Charset> encoding, final IterV<Character, A> i) {
+    return bracket(fileReader(f, encoding)
       , Function.<Reader, IO<Unit>>vary(closeReader)
       , partialApply2(IO.<A>charChunkReader2(), i));
   }
 
-  public static IO<BufferedReader> bufferedReader(final File f) {
-    return new IO<BufferedReader>() {
+  public static IO<BufferedReader> bufferedReader(final File f, final Option<Charset> encoding) {
+    return fileReader(f, encoding).map(new F<Reader, BufferedReader>() {
       @Override
-      public BufferedReader run() throws IOException {
-        return new BufferedReader(new FileReader(f));
-      }
-    };
+      public BufferedReader f(final Reader a) {
+        return new BufferedReader(a);
+      }});
   }
 
-  public static IO<Reader> fileReader(final File f) {
+  public static IO<Reader> fileReader(final File f, final Option<Charset> encoding) {
     return new IO<Reader>() {
       @Override
       public Reader run() throws IOException {
-        return new FileReader(f);
+        final FileInputStream fis = new FileInputStream(f);
+        return encoding.isNone() ? new InputStreamReader(fis) : new InputStreamReader(fis, encoding.some());
       }
     };
   }
